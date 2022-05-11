@@ -101,7 +101,7 @@ static void *extend_heap(size_t words)
     // sbrk에서 확장하고자 하는 범위가 max_heap을 초과할 경우 -1을 리턴
     if ((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
-    printf("extended size :%d\n", size);
+
     // 현재 가용 가능한 힙의 마지막 point(old_brk = mem_brk(확장 전))를 리턴하기 때문에
     // 해당 위치의 헤더 및 풋터에 확장시킨 크기와 가용 상태를 pack 해주고
     PUT(HDRP(bp), PACK(size, 0));
@@ -115,7 +115,7 @@ static void *extend_heap(size_t words)
 
 int mm_init(void)
 {
-    printf("-----------entered init!------------\n");
+    // printf("-----------entered init!------------\n");
     if ((heap_listp = mem_sbrk(24 * WSIZE)) == (void *)-1) // 프롤로그, 에필로그 및 블록 크기 별 루트를 담기 위한 블록 생성
         return -1;
     PUT(heap_listp, 0);                                 // 힙이 첫번째 블록에 0 삽입
@@ -133,7 +133,7 @@ int mm_init(void)
     {              // 힙 영역 확장의 최소 단위인 CHUNKSIZE(2^12bytes=4096bytes) 크기만큼 확장
         return -1; // max_heap 초과하면 -1 리턴
     }
-    printf("init done\n");
+    // printf("init done\n");
     return 0;
 }
 
@@ -152,7 +152,7 @@ void *mm_malloc(size_t size)
     //     *(size_t *)p = size;
     //     return (void *)((char *)p + SIZE_T_SIZE);
     // }
-    printf("entered malloc\n");
+    // printf("entered malloc\n");
     size_t asize;      // Adjusted block size
     size_t extendsize; // Amount to extend heap if no fit
     char *bp;
@@ -170,12 +170,12 @@ void *mm_malloc(size_t size)
         // 다음에 볼 때 쯤이면 잊어버리고 왜?? 할 수도 있으니 직접!! 그림을 그려볼 것^^
         asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
     }
-    printf("needed bloack size: %d\n", asize);
+
     if ((bp = find_fit(asize)) != NULL)
     {                     // 가용 블록을 찾기 위한 과정, first_fit임
         place(bp, asize); // 헤더와 풋터를 설정해주고, 메모리 누수를 방지하기 위해 블록을 분리시킴
         // (넣어줄 가용 블록 크기 - 할당한 크기)만큼을 가용공간으로 할당해줌
-        printf("malloc(find_fit) done\n");
+        // printf("malloc(find_fit) done\n");
         return bp;
     }
 
@@ -185,7 +185,7 @@ void *mm_malloc(size_t size)
         return NULL;
 
     place(bp, asize);
-    printf("malloc(extend_heap) done\n");
+    // printf("malloc(extend_heap) done\n");
     return bp;
 }
 
@@ -196,11 +196,9 @@ void *mm_malloc(size_t size)
 // calloc은 할당 할 때, 데이터 값을 0으로 초기화 해줌
 void mm_free(void *bp)
 {
-    printf("entered free\n!");
+    // printf("entered free\n!");
     size_t size = GET_SIZE(HDRP(bp)); // 현재 블록의 크기
 
-
-    printf("free size: %d\n!", size);
     // 현재 블록의 헤더와 풋터에 현재 블록 크기와 가용 상태를 pack 해줌
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
@@ -209,9 +207,10 @@ void mm_free(void *bp)
 
 void insert_link(void *bp, size_t size)
 {
-    printf("entered insert_link\n!");
+    // printf("entered insert_link\n!");
     void *listp = heap_listp;
-    
+    void *search_ptr; 
+    void *insert_ptr = NULL;                           //search_ptr의 값을 저장해놓는 용도(search_ptr의 부모같음) 
     // printf("listp: %p\n", listp);
     // printf("heap_listp: %p\n", heap_listp);
     // printf("initial size: %d\n", size);
@@ -221,22 +220,54 @@ void insert_link(void *bp, size_t size)
         listp += WSIZE;
         // printf("size: %d\n", size);
     }
-    
-    if (ROOT(listp) != NULL){
-        PREV_FREEB(ROOT(listp)) = bp;
+    // printf("heap_listp2: %p\n", heap_listp);
+    // printf("final listp: %p\n", listp);
+    search_ptr = ROOT(listp);
+    // printf("search_ptr: %p\n", search_ptr);
+
+    // ROOT(listp) = heap_listp;
+    // printf("Root test: %p\n" ,listp);
+
+    //오름차순으로 저장하기 위해 나보다 작은 놈들은 넘기고 나보다 큰놈 앞에서 멈추게 됨 
+    while ((search_ptr != NULL) && (size > GET_SIZE(HDRP(search_ptr)))){ 
+        insert_ptr = search_ptr; 
+        search_ptr = NEXT_FREEB(search_ptr); 
+        //succ로 계속 넘어가서 찾는다. 
+    } 
+
+    if (search_ptr != NULL){                //search_ptr이 NULL이 아닐 때 
+        if (insert_ptr != NULL){            //insert_ptr이 NULL이 아닐 때 
+            NEXT_FREEB(bp) = search_ptr;     //insert, search 사이에 넣는 경우 
+            PREV_FREEB(bp) = insert_ptr; 
+            PREV_FREEB(search_ptr) = bp; 
+            NEXT_FREEB(insert_ptr) = bp; 
+        }
+        else{                               //insert_ptr이 NULL일 때 (안에 들어왔는데 내가 제일 작아서 list에 바로 삽입할 때) 
+            NEXT_FREEB(bp) = search_ptr; 
+            PREV_FREEB(bp) = NULL; 
+            PREV_FREEB(search_ptr) = bp; 
+            ROOT(listp) = bp;    //segregation_list 최신화 
+        } 
     }
-
-    NEXT_FREEB(bp) = ROOT(listp);
-    ROOT(listp) = bp;
-    PREV_FREEB(bp) = listp;
-
-    printf("insert_link done!\n!");
+    else{                                   // search_ptr이 NULL일 때 
+        if (insert_ptr != NULL){            // 처음 시작할 때는 이 코드가 돌아갈 일이 없지만 
+            NEXT_FREEB(bp) = NULL;           // 진행하다보면 연결 list안에서 내가 제일 커서 search_ptr은 null, 
+            PREV_FREEB(bp) = insert_ptr;     // insert_ptr은 현재 list에서 가장 큰 경우가 존재한다. 
+            NEXT_FREEB(insert_ptr) = bp; 
+        }
+        else{                               // 아무것도 없어서 list에 내가 처음 넣을 때 
+            NEXT_FREEB(bp) = NULL; 
+            PREV_FREEB(bp) = NULL; 
+            ROOT(listp) = bp;    //segregation_list 최신화 
+        } 
+    } 
+    // printf("insert_link done!\n!");
     return;
 }
 
 void delete_link(void *bp)
 {
-    printf("entered delete_link\n!");
+    // printf("entered delete_link\n!");
     void *listp = heap_listp;
     size_t size = GET_SIZE(HDRP(bp));
 
@@ -246,22 +277,31 @@ void delete_link(void *bp)
         listp += WSIZE;
     }
 
-    if (PREV_FREEB(bp) == listp){ // 내가 루트인 경우
-        if (NEXT_FREEB(bp) == NULL){ // 내 다음이 없으면
-            ROOT(listp) == NULL; // 리스트에 나 혼자이므로 해당 루트는 NULL로 초기화
-        } else { // 나 다음이 있으면
+    if (NEXT_FREEB(bp) != NULL)
+    { // succ 블록이 NULL이 아니면
+        if (PREV_FREEB(bp) != NULL)
+        { // pred 블록이 NULL이 아니면 (중간에 있는걸 지우는 경우)
+            PREV_FREEB(NEXT_FREEB(bp)) = PREV_FREEB(bp);
+            NEXT_FREEB(PREV_FREEB(bp)) = NEXT_FREEB(bp);
+        }
+        else
+        { // pred 블록이 NULL일 경우 (list에서 맨 처음을 지우는 경우)
+            PREV_FREEB(NEXT_FREEB(bp)) = NULL;
             ROOT(listp) = NEXT_FREEB(bp);
         }
-    } else { // 내가 루트가 아닌 경우
-        if (NEXT_FREEB(bp) == NULL){ // 내가 리스트의 마지막인 경우
+    }
+    else
+    { // succ 블록이 NULL일 경우
+        if (PREV_FREEB(bp) != NULL)
+        { //리스트의 끝의 블록을 지우는 경우
             NEXT_FREEB(PREV_FREEB(bp)) = NULL;
-        } else { // 내가 리스트의 마지막이 아닌 경우
-            NEXT_FREEB(PREV_FREEB(bp)) = NEXT_FREEB(bp);
-            PREV_FREEB(NEXT_FREEB(bp)) = PREV_FREEB(bp);
+        }
+        else
+        { // 애초에 하나만 존재했을 경우
+            ROOT(listp) = NULL;
         }
     }
-    
-    printf("delete_link done!\n!");
+    // printf("delete_link done!\n!");
     return;
 
     // printf("delete 종료\n");
@@ -269,7 +309,7 @@ void delete_link(void *bp)
 
 static void *coalesce(void *bp)
 {
-    printf("entered coalesce\n!");
+    // printf("entered coalesce\n!");
     // 현재 블록의 이전 및 다음 블록의 가용 여부 확인(0 or 1)
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
@@ -278,7 +318,7 @@ static void *coalesce(void *bp)
     // printf("%d %d\n", prev_alloc, next_alloc);
     if (prev_alloc && next_alloc)
     { // 이전 블록 및 다음 블록이 할당된 상태면 합칠 블록이 없으므로 현재 위치를 리턴
-        printf("coalesce first condition passed!\n");
+        // printf("coalesce first condition passed!\n");
         insert_link(bp, size);
         return bp;
     }
@@ -311,13 +351,13 @@ static void *coalesce(void *bp)
         bp = PREV_BLKP(bp);                      // 이전 블록의 bp로 갱신
     }
     insert_link(bp, size);
-    printf("coalesce done!\n!");
+    // printf("coalesce done!\n!");
     return bp;
 }
 
 static void *find_fit(size_t asize)
 {
-    printf("entered find_fit! \n!");
+    // printf("entered find_fit! \n!");
     /* First-fit search */
     void *bp;
     void *listp;
@@ -326,33 +366,27 @@ static void *find_fit(size_t asize)
 
     while (listp < heap_listp + LISTLIMIT * WSIZE)
     {
-        printf("while 문 내 listp: %p %p\n", listp, heap_listp);
         // (list가 현재 0~19이므로)가용블록을 못찾아서 19번째 리스트에 도달하거나,
         // (19번째 list에는 무조건 넣어야 함)
         // 나보다 큰 사이즈의 segregation_list가 NULL이 아니면 (나보다 큰 사이즈의 list 안에 free 블록이 존재할 경우)
-        printf("listp: %p\n", listp);
         if ((listp == heap_listp + (LISTLIMIT - 1) * WSIZE) || (searchsize <= 1) && (ROOT(listp) != NULL))
         {
-            printf("if 문 내 listp: %p\n", listp);
             bp = ROOT(listp);
-            printf("if 문 내 bp: %p\n", bp);
+
             while ((bp != NULL) && (asize > GET_SIZE(HDRP(bp))))
             {
-                printf("while 문 내 첫번째 bp: %p\n", bp);
                 bp = NEXT_FREEB(bp);
-                printf("while 문 내 bp: %p\n", bp);
             }
             if (bp != NULL)
             {   
-                // printf("success size: %d\n", GET_SIZE(HDRP(bp)));
-                printf("find_fit done! \n!");
+                // printf("find_fit done! \n!");
                 return bp;
             }
         }
         searchsize >>= 1;
         listp += WSIZE;
     }
-    printf("find_fit done(return NULL)! \n!");
+    // printf("find_fit done(return NULL)! \n!");
     return NULL; /* no fit */
 
     // #endif
